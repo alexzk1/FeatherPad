@@ -486,6 +486,21 @@ public:
     void setLastFileCursorPos (const QHash<QString, QVariant>& curPos) {
         lasFilesCursorPos_ = curPos;
     }
+
+    // Reads the "last files" state (file → cursor position) from the JSON store,
+    // falling back to the legacy QSettings entry if the JSON is missing or broken.
+    QHash<QString, QVariant> readLastFilesState();
+    // Serializes the state to JSON and stores it via the given settings. Kept as
+    // a dedicated method so the storage can later be moved to a dedicated file
+    // without touching callers. Takes the existing Settings& so it doesn't open a
+    // second QSettings instance to the same file while a lock is held.
+    void saveJson (Settings &settings, const QHash<QString, QVariant>& state);
+    // Merges this window's open files into the stored list atomically (under a
+    // lock). "loaded" are the files this window restored from disk at startup:
+    // files that were loaded but are no longer open are removed, everything else
+    // already on disk is preserved, and the currently open files are (re)added.
+    void appendLastFilesState (const QStringList &loaded,
+                               const QHash<QString, QVariant>& openNow);
 /*************************/
     bool getAutoSave() const {
         return autoSave_;

@@ -20,8 +20,15 @@
 #include "config.h"
 //#include <QFileInfo>
 #include <QKeySequence>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonValue>
+#include <QLockFile>
+#include <QThread>
+#include <QFile>
 
 #include <cmath>
+#include <exception>
 
 namespace FeatherPad {
 
@@ -347,8 +354,10 @@ QStringList Config::getLastFiles()
     if (!saveLastFilesList_) // it's already decided
         return QStringList();
 
-    Settings settingsLastCur ("featherpad", "fp_last_cursor_pos");
-    lasFilesCursorPos_ = settingsLastCur.value ("cursorPositions").toHash();
+    /* Prefer the JSON store. It reflects the current per-session list. Fall back
+       to the legacy QSettings entry only if the JSON is missing or broken, which
+       also serves as the migration path on the first launch of this version. */
+    lasFilesCursorPos_ = readLastFilesState();
 
     QStringList lastFiles = lasFilesCursorPos_.keys();
     lastFiles.removeAll ("");
@@ -588,6 +597,143 @@ void Config::writeCursorPos()
             settingsLastCur.setValue ("cursorPositions", lasFilesCursorPos_);
         else
             settingsLastCur.remove ("cursorPositions");
+    }
+}
+/*************************/
+QHash<QString, QVariant> Config::readLastFilesState()
+{
+    if (!saveLastFilesList_)
+        return QHash<QString, QVariant>();
+
+    Settings settings ("featherpad", "fp_last_cursor_pos");
+
+    /* First, try the JSON store. If it's missing or broken (e.g., after a crash
+       mid-write), fall back to the legacy QSettings entry. That fallback also
+       serves as the migration path on the first launch of this version. */
+    QString jsonStr = settings.value ("lastFilesJson").toString();
+    if (!jsonStr.isEmpty())
+    {
+        QJsonParseError parseError;
+        QJsonDocument doc = QJsonDocument::fromJson (jsonStr.toUtf8(), &parseError);
+        if (parseError.error == QJsonParseError::NoError && doc.isObject())
+        {
+            QJsonObject files = doc.object().value ("files").toObject();
+            if (!files.isEmpty())
+            {
+                QHash<QString, QVariant> result;
+                for (auto it = files.constBegin(); it != files.constEnd(); ++it)
+                    result.insert (it.key(), it.value().toVariant());
+                return result;
+            }
+        }
+    }
+
+    return settings.value ("cursorPositions").toHash();
+}
+/*************************/
+void Config::saveJson (Settings &settings, const QHash<QString, QVariant>& state)
+{
+    QJsonObject files;
+    QHash<QString, QVariant>::const_iterator it = state.constBegin();
+    while (it != state.constEnd())
+    {
+        if (!it.key().isEmpty())
+            files.insert (it.key(), QJsonValue::fromVariant (it.value()));
+        ++it;
+    }
+
+    QJsonObject root;
+    root.insert ("files", files);
+    QJsonDocument doc (root);
+
+    settings.setValue ("lastFilesJson",
+                       QString::fromUtf8 (doc.toJson (QJsonDocument::Compact)));
+}
+/*************************/
+// RAII helper that always releases the QLockFile, even if an exception is
+// thrown while the state is being written.
+class LockGuard {
+public:
+    explicit LockGuard (QLockFile &lock) : lock_ (lock) {}
+    ~LockGuard()
+    {
+        if (lock_.isLocked())
+            lock_.unlock();
+    }
+    LockGuard (const LockGuard &) = delete;
+    LockGuard &operator= (const LockGuard &) = delete;
+private:
+    QLockFile &lock_;
+};
+/*************************/
+void Config::appendLastFilesState (const QStringList &loaded,
+                                   const QHash<QString, QVariant>& openNow)
+{
+    if (!saveLastFilesList_)
+        return;
+
+    /* Read-modify-write under a lock so that several simultaneously running
+       instances don't clobber each other's updates. The lock lives next to the
+       QSettings file, which all processes share. */
+    Settings settings ("featherpad", "fp_last_cursor_pos");
+    QLockFile lock (settings.fileName() + ".lock");
+    bool locked = false;
+    for (int i = 0; i < 100 && !locked; ++i)
+    {
+        locked = lock.tryLock (0);
+        if (!locked)
+            QThread::sleep (0.01);
+    }
+    if (!locked)
+        return; // another instance holds the lock; skip this write
+
+    LockGuard guard (lock);
+
+    try
+    {
+        QHash<QString, QVariant> disk = readLastFilesState();
+        QHash<QString, QVariant> result = disk;
+
+        /* Remove files that this window loaded from disk but closed this session. */
+        QHash<QString, QVariant>::iterator it = result.begin();
+        while (it != result.end())
+        {
+            if (loaded.contains (it.key()) && !openNow.contains (it.key()))
+                it = result.erase (it);
+            else
+                ++it;
+        }
+
+        /* (Re)add the files this window currently has open (only existing ones). */
+        for (QHash<QString, QVariant>::const_iterator oit = openNow.constBegin();
+             oit != openNow.constEnd(); ++oit)
+        {
+            if (!oit.key().isEmpty() && QFile::exists (oit.key()))
+                result.insert (oit.key(), oit.value());
+        }
+
+        /* Never remember more than 50 files. */
+        QHash<QString, QVariant> capped;
+        if (result.size() > 50)
+        {
+            QStringList keys = result.keys();
+            while (keys.count() > 50)
+                keys.removeLast();
+            for (const QString &key : keys)
+                capped.insert (key, result.value (key));
+        }
+        else
+            capped = result;
+
+        saveJson (settings, capped);
+    }
+    catch (const std::exception &e)
+    {
+        qDebug() << "appendLastFilesState exception:" << e.what();
+    }
+    catch (...)
+    {
+        qDebug() << "appendLastFilesState unknown exception";
     }
 }
 /*************************/

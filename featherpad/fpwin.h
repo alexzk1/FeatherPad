@@ -46,7 +46,7 @@ public:
     explicit FPwin (QWidget *parent = nullptr);
     ~FPwin();
 
-    void cleanUpOnTerminating (Config &config, bool isLastWin);
+    void cleanUpOnTerminating (Config &config);
 
     bool isScriptLang (const QString& lang) const;
 
@@ -102,6 +102,7 @@ public slots:
     void showCursorPos();
     void updateWordInfo (int position = -1, int charsRemoved = 0, int charsAdded = 0);
     void enableSaving (bool modified);
+    void setLoadedFromDisk_ (const QStringList &files) { loadedFromDisk_ = files; }
 
 private slots:
     void newTabFromRecent();
@@ -277,6 +278,7 @@ private:
     QActionGroup *aGroup_;
     QString lastFile_; // The last opened or saved file (for file dialogs).
     QHash<QString, QVariant> lastWinFilesCur_; // The last window files and their cusrors (if restored).
+    QStringList loadedFromDisk_; // Files this window restored from disk at startup (empty for append-only instances).
     int rightClicked_; // The index/row of the right-clicked tab/item.
     int loadingProcesses_; // The number of loading processes (used to prevent early closing).
     QMetaObject::Connection lambdaConnection_; // Captures a lambda connection to disconnect it later.

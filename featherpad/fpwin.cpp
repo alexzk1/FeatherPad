@@ -359,7 +359,13 @@ void FPwin::closeEvent (QCloseEvent *event)
         }
         if (sidePane_ && config.getRemSplitterPos())
             config.setSplitterPos (ui->splitter->sizes().at (0));
-        config.setLastFileCursorPos (lastWinFilesCur_);
+        config.appendLastFilesState (loadedFromDisk_, lastWinFilesCur_);
+        // keep the legacy QSettings fallback in sync (union across windows)
+        QHash<QString, QVariant> saved = config.getLastFilesCursorPos();
+        for (QHash<QString, QVariant>::const_iterator it = lastWinFilesCur_.constBegin();
+             it != lastWinFilesCur_.constEnd(); ++it)
+            saved.insert (it.key(), it.value());
+        config.setLastFileCursorPos (saved);
         singleton->removeWin (this);
         event->accept();
     }
@@ -368,33 +374,44 @@ void FPwin::closeEvent (QCloseEvent *event)
 // This method should be called only when the app quits without closing its windows
 // (e.g., with SIGTERM). It saves the important info that can be queried only at the
 // session end and, for now, covers cursor positions of sessions and last files.
-void FPwin::cleanUpOnTerminating (Config &config, bool isLastWin)
+void FPwin::cleanUpOnTerminating (Config &config)
 {
     /* WARNING: Qt5 has a bug that will cause a crash if "QDockWidget::visibilityChanged"
                 isn't disconnected here. This is also good with Qt6. */
     disconnect (ui->dockReplace, &QDockWidget::visibilityChanged, this, &FPwin::dockVisibilityChanged);
 
-    lastWinFilesCur_.clear();
+    /* Save cursor positions of all still-open files. */
     for (int i = 0; i < ui->tabWidget->count(); ++i)
     {
         if (TabPage *tabPage = qobject_cast<TabPage*>(ui->tabWidget->widget (i)))
         {
             TextEdit *textEdit = tabPage->textEdit();
             QString fileName = textEdit->getFileName();
-            if (!fileName.isEmpty())
-            {
-                if (textEdit->getSaveCursor())
-                    config.saveCursorPos (fileName, textEdit->textCursor().position());
-                if (isLastWin && config.getSaveLastFilesList()
-                    && lastWinFilesCur_.size() < MAX_LAST_WIN_FILES
-                    && QFile::exists (fileName))
-                {
-                    lastWinFilesCur_.insert (fileName, textEdit->textCursor().position());
-                }
-            }
+            if (!fileName.isEmpty() && textEdit->getSaveCursor())
+                config.saveCursorPos (fileName, textEdit->textCursor().position());
         }
     }
-    config.setLastFileCursorPos (lastWinFilesCur_);
+
+    /* Build the set of files currently open in this window (with their cursors)
+       and merge them into the stored "last files" list. */
+    QHash<QString, QVariant> openNow;
+    for (int i = 0; i < ui->tabWidget->count(); ++i)
+    {
+        if (TabPage *tabPage = qobject_cast<TabPage*>(ui->tabWidget->widget (i)))
+        {
+            TextEdit *textEdit = tabPage->textEdit();
+            QString fileName = textEdit->getFileName();
+            if (!fileName.isEmpty() && QFile::exists (fileName))
+                openNow.insert (fileName, textEdit->textCursor().position());
+        }
+    }
+    config.appendLastFilesState (loadedFromDisk_, openNow);
+    // keep the legacy QSettings fallback in sync (union across windows)
+    QHash<QString, QVariant> saved = config.getLastFilesCursorPos();
+    for (QHash<QString, QVariant>::const_iterator it = openNow.constBegin();
+         it != openNow.constEnd(); ++it)
+        saved.insert (it.key(), it.value());
+    config.setLastFileCursorPos (saved);
 }
 /*************************/
 void FPwin::toggleSidePane()

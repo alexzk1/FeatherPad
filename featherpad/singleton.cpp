@@ -95,7 +95,7 @@ void FPsingleton::quitting()
     /* save some important info if windows aren't closed
        (e.g., when the app is terminated by SIGTERM) */
     for (int i = 0; i < Wins.size(); ++i)
-        Wins.at (i)->cleanUpOnTerminating (config_, i == Wins.size() - 1);
+        Wins.at (i)->cleanUpOnTerminating (config_);
 
     if (searchModel_)
         delete searchModel_;
@@ -287,12 +287,14 @@ FPwin* FPsingleton::newWin (const QStringList &filesList,
 
     if (!filesList.isEmpty())
     {
+        fp->setLoadedFromDisk_ (QStringList()); // append-only: never remove previously saved files
         bool multiple (filesList.count() > 1 || fp->isLoading());
         for (int i = 0; i < filesList.count(); ++i) // open all files in new tabs
             fp->newTabFromName (filesList.at (i), lineNum, posInLine, multiple);
     }
     else if (!lastFiles_.isEmpty())
     {
+        fp->setLoadedFromDisk_ (lastFiles_); // owner: these files were restored from disk
         bool multiple (lastFiles_.count() > 1 || fp->isLoading());
         for (int i = 0; i < lastFiles_.count(); ++i)
             fp->newTabFromName (lastFiles_.at (i), -1, 0, multiple); // restore cursor positions too
