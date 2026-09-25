@@ -27,6 +27,15 @@ Please see [INSTALL](INSTALL) for instructions on compilation, installation and 
 
 FeatherPad was written in GTK+ at first, then ported to Qt with more features. Its homepage is <https://github.com/tsujan/FeatherPad>.
 
+## Custom Improvements in this Fork
+
+This fork includes specific UX and stability enhancements to address common workflows:
+
+* **Enhanced Search Behavior**: 
+  - Pressing `Ctrl+F` now automatically copies the current text selection into the search bar, matching standard behavior found in most modern code editors.
+* **Robust Session Management**: 
+  - Fixed an issue where opening files via CLI could overwrite the existing session's "last opened files" list.
+
 ## Credits
 
 Haiku OS support is added by [khallebal at GitHub](https://github.com/khallebal).
