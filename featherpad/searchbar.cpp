@@ -263,8 +263,9 @@ void SearchBar::searchStarted()
     searchStarted_ = false;
 }
 /*************************/
-void SearchBar::focusLineEdit()
+void SearchBar::focusLineEdit (const QString &text)
 {
+    if (!text.isEmpty()) lineEdit_->setText (text);
     lineEdit_->setFocus();
     lineEdit_->selectAll();
 }

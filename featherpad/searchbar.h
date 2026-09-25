@@ -54,7 +54,7 @@ public:
                Qt::WindowFlags f = Qt::WindowFlags());
 
     void setSearchModel (QStandardItemModel *model);
-    void focusLineEdit();
+    void focusLineEdit (const QString &text = QString());
     bool lineEditHasFocus() const;
     QString searchEntry() const;
     void clearSearchEntry();

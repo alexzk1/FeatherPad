@@ -53,7 +53,7 @@ bool TabPage::isSearchBarVisible() const
 /*************************/
 void TabPage::focusSearchBar()
 {
-    searchBar_->focusLineEdit();
+    searchBar_->focusLineEdit (textEdit_->textCursor().selectedText());
 }
 /*************************/
 bool TabPage::searchBarHasFocus() const
