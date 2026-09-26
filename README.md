@@ -34,7 +34,7 @@ This fork includes specific UX and stability enhancements to address common work
 * **Enhanced Search Behavior**: 
   - Pressing `Ctrl+F` now automatically copies the current text selection into the search bar, matching standard behavior found in most modern code editors.
 * **Robust Session Management**: 
-  - Fixed an issue where opening files via CLI could overwrite the existing session's "last opened files" list.
+  - Fixed an issue where opening files via CLI could overwrite the existing session's "last opened files" list when enabled "Start with files of last window". Now, "Close Window" action means "open currently opened files next time" and "Close Tab" action means "do not load this file next time" where "next time" means simple app start without args.
 
 ## Credits
 
